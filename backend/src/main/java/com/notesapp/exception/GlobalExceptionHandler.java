@@ -59,6 +59,14 @@ public class GlobalExceptionHandler {
         return pd;
     }
 
+    @ExceptionHandler(DuplicateTagException.class)
+    public ProblemDetail handleDuplicateTag(DuplicateTagException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        pd.setType(URI.create("https://notesapp.com/errors/duplicate-tag"));
+        pd.setTitle("Duplicate Tag");
+        return pd;
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGeneric(Exception ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
