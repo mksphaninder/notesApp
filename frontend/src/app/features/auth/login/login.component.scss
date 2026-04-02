@@ -1,0 +1,22 @@
+@use '../auth-shared' as auth;
+
+.auth-page {
+  @include auth.page;
+}
+
+.auth-card {
+  @include auth.card;
+}
+
+.auth-header {
+  @include auth.header;
+}
+
+.auth-logo {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.auth-footer {
+  @include auth.footer;
+}

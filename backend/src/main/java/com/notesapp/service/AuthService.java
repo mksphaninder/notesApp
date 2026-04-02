@@ -46,7 +46,7 @@ public class AuthService {
         String accessToken = jwtService.generateAccessToken(user);
         String rawRefreshToken = createAndSaveRefreshToken(user);
 
-        return AuthResponse.of(accessToken, jwtService.getAccessTokenExpiration(), UserResponse.from(user));
+        return AuthResponse.of(accessToken, rawRefreshToken, jwtService.getAccessTokenExpiration(), UserResponse.from(user));
     }
 
     @Transactional
@@ -63,9 +63,9 @@ public class AuthService {
                 .orElseThrow(InvalidCredentialsException::new);
 
         String accessToken = jwtService.generateAccessToken(user);
-        createAndSaveRefreshToken(user);
+        String rawRefreshToken = createAndSaveRefreshToken(user);
 
-        return AuthResponse.of(accessToken, jwtService.getAccessTokenExpiration(), UserResponse.from(user));
+        return AuthResponse.of(accessToken, rawRefreshToken, jwtService.getAccessTokenExpiration(), UserResponse.from(user));
     }
 
     @Transactional
@@ -92,9 +92,9 @@ public class AuthService {
         refreshTokenRepository.save(refreshToken);
 
         String newAccessToken = jwtService.generateAccessToken(user);
-        createAndSaveRefreshToken(user);
+        String newRawRefreshToken = createAndSaveRefreshToken(user);
 
-        return AuthResponse.of(newAccessToken, jwtService.getAccessTokenExpiration(), UserResponse.from(user));
+        return AuthResponse.of(newAccessToken, newRawRefreshToken, jwtService.getAccessTokenExpiration(), UserResponse.from(user));
     }
 
     @Transactional

@@ -1,0 +1,64 @@
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-logo">📝</div>
+      <h1>Welcome back</h1>
+      <p>Sign in to your notes</p>
+    </div>
+
+    @if (errorMessage()) {
+      <div class="alert alert--error" role="alert">
+        {{ errorMessage() }}
+      </div>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          formControlName="email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          [class.field__input--error]="emailError"
+        />
+        @if (emailError) {
+          <span class="field__error">{{ emailError }}</span>
+        }
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="field__input-wrapper">
+          <input
+            id="password"
+            [type]="showPassword() ? 'text' : 'password'"
+            formControlName="password"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            [class.field__input--error]="passwordError"
+          />
+          <button type="button" class="field__toggle" (click)="togglePassword()" tabindex="-1">
+            {{ showPassword() ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+        @if (passwordError) {
+          <span class="field__error">{{ passwordError }}</span>
+        }
+      </div>
+
+      <button type="submit" class="btn btn--primary" [disabled]="isLoading()">
+        @if (isLoading()) {
+          <span class="spinner"></span> Signing in…
+        } @else {
+          Sign in
+        }
+      </button>
+    </form>
+
+    <p class="auth-footer">
+      Don't have an account? <a routerLink="/register">Create one</a>
+    </p>
+  </div>
+</div>
