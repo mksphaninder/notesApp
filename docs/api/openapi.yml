@@ -1,0 +1,1470 @@
+openapi: 3.1.0
+
+info:
+  title: NotesApp API
+  version: 1.0.0
+  description: |
+    REST API for NotesApp — a real-time rich-text note-taking application.
+
+    Consumed by the Angular 21 web frontend and (Phase 2) the native iOS Swift app.
+
+    ## Authentication
+
+    All protected endpoints require a Bearer JWT in the `Authorization` header:
+
+    ```
+    Authorization: Bearer <access_token>
+    ```
+
+    Access tokens expire after **15 minutes**. Use `POST /auth/refresh` to obtain
+    a new pair before or after expiry. Refresh tokens expire after **30 days** and
+    are rotated on every use.
+
+    ## Rich Text Content Format
+
+    Note `content` is stored and returned as a **ProseMirror JSON document**.
+    The root node is always `{ "type": "doc", "content": [...] }`.
+    Clients must use a ProseMirror-compatible parser (e.g., TipTap) to render content.
+
+    ## Pagination
+
+    List endpoints return a `PagedResponse` envelope:
+    ```json
+    {
+      "items": [...],
+      "page": 0,
+      "size": 20,
+      "totalItems": 142,
+      "totalPages": 8
+    }
+    ```
+
+    ## Error Format
+
+    All errors return an `ErrorResponse`:
+    ```json
+    {
+      "status": 400,
+      "error": "VALIDATION_ERROR",
+      "message": "Human-readable description",
+      "timestamp": "2026-04-01T12:00:00Z",
+      "path": "/api/v1/notes",
+      "fieldErrors": [
+        { "field": "title", "message": "must not be blank" }
+      ]
+    }
+    ```
+
+  contact:
+    name: NotesApp Team
+    email: dev@notesapp.example.com
+
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+  - url: https://api.notesapp.example.com/api/v1
+    description: Production
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Registration, login, token refresh, logout
+  - name: Notes
+    description: Note CRUD and full-text search
+  - name: Tags
+    description: Tag management (user-scoped labels)
+  - name: System
+    description: Health and diagnostic endpoints
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token issued by `POST /auth/login` or `POST /auth/register`.
+        Expires after 15 minutes. Obtain a new token via `POST /auth/refresh`.
+
+  schemas:
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - displayName
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: maya.chen@example.com
+          description: Must be unique across all accounts.
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: "S3cur3P@ssw0rd!"
+          description: |
+            Must be at least 8 characters. The server stores only the bcrypt hash.
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Maya Chen
+          description: Visible name shown in the UI.
+      additionalProperties: false
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: maya.chen@example.com
+        password:
+          type: string
+          format: password
+          example: "S3cur3P@ssw0rd!"
+      additionalProperties: false
+
+    RefreshRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+          example: "a3f9d2e1b8c74f6e9d0a1b2c3d4e5f60"
+          description: Opaque refresh token as returned by login/register.
+      additionalProperties: false
+
+    LogoutRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+          example: "a3f9d2e1b8c74f6e9d0a1b2c3d4e5f60"
+          description: The refresh token to revoke.
+      additionalProperties: false
+
+    AuthResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - user
+      properties:
+        accessToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          description: JWT access token. Valid for `expiresIn` seconds.
+        refreshToken:
+          type: string
+          example: "a3f9d2e1b8c74f6e9d0a1b2c3d4e5f60"
+          description: Opaque refresh token. Valid for 30 days. Rotated on each use.
+        expiresIn:
+          type: integer
+          example: 900
+          description: Access token lifetime in seconds (always 900 = 15 minutes).
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - email
+        - displayName
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: maya.chen@example.com
+        displayName:
+          type: string
+          example: Maya Chen
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-15T08:30:00Z"
+
+    # ── ProseMirror ───────────────────────────────────────────────────────────
+
+    ProseMirrorMark:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [bold, italic, underline, strike, code, link, textStyle]
+          example: bold
+        attrs:
+          type: object
+          additionalProperties: true
+          description: |
+            Optional mark attributes. For `link`: `{ "href": "...", "target": "_blank" }`.
+            For `textStyle`: `{ "color": "#FF0000" }`.
+          example:
+            href: "https://example.com"
+            target: "_blank"
+
+    ProseMirrorNode:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - doc
+            - paragraph
+            - heading
+            - bulletList
+            - orderedList
+            - listItem
+            - codeBlock
+            - blockquote
+            - hardBreak
+            - horizontalRule
+            - text
+          example: paragraph
+        attrs:
+          type: object
+          additionalProperties: true
+          description: |
+            Node attributes. For `heading`: `{ "level": 2 }`.
+            For `codeBlock`: `{ "language": "python" }`.
+          example:
+            level: 2
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProseMirrorNode'
+          description: Child nodes. Absent for leaf nodes (e.g., `text`, `hardBreak`).
+        marks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProseMirrorMark'
+          description: Inline marks applied to this node. Only present on `text` nodes.
+        text:
+          type: string
+          description: Text content. Only present on `text` type nodes.
+          example: "Hello, world"
+
+    ProseMirrorContent:
+      type: object
+      required:
+        - type
+        - content
+      properties:
+        type:
+          type: string
+          enum: [doc]
+          example: doc
+          description: Root node type — always "doc".
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProseMirrorNode'
+          description: |
+            Array of block-level nodes. Must contain at least one element.
+            An empty document should be represented as:
+            `{ "type": "doc", "content": [{ "type": "paragraph" }] }`
+      example:
+        type: doc
+        content:
+          - type: paragraph
+            content:
+              - type: text
+                text: "Hello, "
+              - type: text
+                text: "world"
+                marks:
+                  - type: bold
+          - type: heading
+            attrs:
+              level: 2
+            content:
+              - type: text
+                text: "Section Title"
+
+    # ── Tags ─────────────────────────────────────────────────────────────────
+
+    TagResponse:
+      type: object
+      required:
+        - id
+        - name
+        - color
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+        name:
+          type: string
+          example: "reading/2026"
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          example: "#10B981"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-20T10:15:00Z"
+
+    CreateTagRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "project/alpha"
+          description: Tag name. Must be unique per user (case-sensitive).
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          default: "#6B7280"
+          example: "#4A90E2"
+          description: |
+            Hex color string including the `#` prefix.
+            Defaults to `#6B7280` (neutral gray) if not provided.
+      additionalProperties: false
+
+    UpdateTagRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "project/beta"
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          example: "#F59E0B"
+      additionalProperties: false
+      description: All fields are optional. Only provided fields are updated.
+
+    # ── Notes ─────────────────────────────────────────────────────────────────
+
+    NoteResponse:
+      type: object
+      required:
+        - id
+        - title
+        - content
+        - tags
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+        title:
+          type: string
+          example: "Q1 Planning Notes"
+        content:
+          $ref: '#/components/schemas/ProseMirrorContent'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagResponse'
+          description: All tags currently applied to this note.
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-02-01T09:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-03-15T14:22:00Z"
+
+    NoteSummary:
+      type: object
+      description: Lightweight note representation for list views. Does not include full `content`.
+      required:
+        - id
+        - title
+        - contentPreview
+        - tags
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+        title:
+          type: string
+          example: "Q1 Planning Notes"
+        contentPreview:
+          type: string
+          maxLength: 300
+          example: "The key priorities for Q1 are: (1) ship the WebSocket feature, (2) improve search..."
+          description: First 300 characters of plain text extracted from note content.
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagResponse'
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-02-01T09:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-03-15T14:22:00Z"
+
+    CreateNoteRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 500
+          default: ""
+          example: "Meeting Notes — April"
+          description: Note title. Defaults to empty string if omitted.
+        content:
+          $ref: '#/components/schemas/ProseMirrorContent'
+          description: |
+            Initial ProseMirror content. Defaults to an empty paragraph document
+            if omitted: `{ "type": "doc", "content": [{ "type": "paragraph" }] }`
+        tagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 50
+          default: []
+          example:
+            - "7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+          description: |
+            UUIDs of tags to apply. All tag IDs must belong to the authenticated user.
+            Returns 403 if any tag ID belongs to another user.
+      additionalProperties: false
+
+    UpdateNoteRequest:
+      type: object
+      description: All fields are optional. Only provided fields are updated.
+      properties:
+        title:
+          type: string
+          maxLength: 500
+          example: "Meeting Notes — April (Updated)"
+        content:
+          $ref: '#/components/schemas/ProseMirrorContent'
+        tagIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 50
+          example:
+            - "7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+          description: |
+            Full replacement of tag associations. If provided, the note's current tags
+            are replaced with exactly this list. Pass an empty array `[]` to remove all tags.
+            Omit the field entirely to leave tags unchanged.
+      additionalProperties: false
+
+    # ── Pagination ────────────────────────────────────────────────────────────
+
+    PagedNotesResponse:
+      type: object
+      required:
+        - items
+        - page
+        - size
+        - totalItems
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NoteSummary'
+          description: Notes for the current page (summary format, no full content).
+        page:
+          type: integer
+          minimum: 0
+          example: 0
+          description: Zero-based current page index.
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+          description: Number of items per page.
+        totalItems:
+          type: integer
+          minimum: 0
+          example: 142
+          description: Total number of notes matching the filter.
+        totalPages:
+          type: integer
+          minimum: 0
+          example: 8
+          description: Total number of pages.
+
+    PagedTagsResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagResponse'
+
+    # ── Errors ────────────────────────────────────────────────────────────────
+
+    FieldError:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+          example: "email"
+        message:
+          type: string
+          example: "must be a well-formed email address"
+
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - error
+        - message
+        - timestamp
+        - path
+      properties:
+        status:
+          type: integer
+          example: 400
+          description: HTTP status code.
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+          description: |
+            Machine-readable error code. Possible values include:
+            `VALIDATION_ERROR`, `EMAIL_ALREADY_REGISTERED`, `INVALID_CREDENTIALS`,
+            `INVALID_TOKEN`, `REFRESH_TOKEN_EXPIRED`, `REFRESH_TOKEN_REVOKED`,
+            `TAG_NAME_ALREADY_EXISTS`, `TAG_NOT_OWNED_BY_USER`,
+            `NOTE_NOT_FOUND`, `TAG_NOT_FOUND`, `FORBIDDEN`, `INTERNAL_ERROR`.
+        message:
+          type: string
+          example: "Request validation failed. See fieldErrors for details."
+          description: Human-readable error description for display or logging.
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-04-01T12:00:00Z"
+        path:
+          type: string
+          example: "/api/v1/notes"
+        fieldErrors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+          description: Present only for `VALIDATION_ERROR` (HTTP 400).
+
+    # ── Health ────────────────────────────────────────────────────────────────
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN, DEGRADED]
+          example: UP
+        version:
+          type: string
+          example: "1.0.0"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-04-01T12:00:00Z"
+        components:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [UP, DOWN]
+              details:
+                type: string
+          example:
+            database:
+              status: UP
+              details: "PostgreSQL 16.2 — connection pool: 10/20 active"
+
+  # ── Reusable Parameters ────────────────────────────────────────────────────
+
+  parameters:
+    noteId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID of the note.
+      example: "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+
+    tagId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID of the tag.
+      example: "7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+
+    pageParam:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: Zero-based page index.
+
+    sizeParam:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Number of items per page (max 100).
+
+  # ── Reusable Responses ─────────────────────────────────────────────────────
+
+  responses:
+    Unauthorized:
+      description: |
+        Missing, expired, or invalid Bearer token.
+        The client should attempt a token refresh or redirect to login.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 401
+            error: INVALID_TOKEN
+            message: "Access token is missing or has expired."
+            timestamp: "2026-04-01T12:00:00Z"
+            path: "/api/v1/notes"
+
+    Forbidden:
+      description: |
+        The authenticated user does not have permission to access this resource.
+        Typically: attempting to read/write/delete a resource owned by another user.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 403
+            error: FORBIDDEN
+            message: "You do not have permission to access this resource."
+            timestamp: "2026-04-01T12:00:00Z"
+            path: "/api/v1/notes/3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+
+    NotFound:
+      description: |
+        The requested resource does not exist. Note: resources belonging to other users
+        also return 404 (not 403) to prevent information disclosure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 404
+            error: NOTE_NOT_FOUND
+            message: "Note not found."
+            timestamp: "2026-04-01T12:00:00Z"
+            path: "/api/v1/notes/3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+
+    ValidationError:
+      description: One or more request fields failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 400
+            error: VALIDATION_ERROR
+            message: "Request validation failed."
+            timestamp: "2026-04-01T12:00:00Z"
+            path: "/api/v1/notes"
+            fieldErrors:
+              - field: "title"
+                message: "size must be between 0 and 500"
+
+    InternalError:
+      description: An unexpected server-side error occurred. Safe to retry after a brief delay.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 500
+            error: INTERNAL_ERROR
+            message: "An unexpected error occurred. Please try again."
+            timestamp: "2026-04-01T12:00:00Z"
+            path: "/api/v1/notes"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── Auth ───────────────────────────────────────────────────────────────────
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerUser
+      summary: Register a new user account
+      description: |
+        Creates a new user account. Returns an `AuthResponse` with an access token,
+        refresh token, and the newly created user summary.
+
+        The email must be unique. The password is bcrypt-hashed server-side and never
+        returned or logged. The caller should immediately store the tokens.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: maya.chen@example.com
+              password: "S3cur3P@ssw0rd!"
+              displayName: Maya Chen
+      responses:
+        '201':
+          description: Account created successfully. Returns tokens and user summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                accessToken: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1NTBlODQwMCJ9.abc"
+                refreshToken: "a3f9d2e1b8c74f6e9d0a1b2c3d4e5f60"
+                expiresIn: 900
+                user:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  email: maya.chen@example.com
+                  displayName: Maya Chen
+                  createdAt: "2026-04-01T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: An account with this email already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 409
+                error: EMAIL_ALREADY_REGISTERED
+                message: "An account with email 'maya.chen@example.com' already exists."
+                timestamp: "2026-04-01T12:00:00Z"
+                path: "/api/v1/auth/register"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: loginUser
+      summary: Authenticate with email and password
+      description: |
+        Validates credentials and returns a new access + refresh token pair.
+
+        On 5 or more failed attempts within a 60-second window (by IP), the endpoint
+        returns `429 Too Many Requests` with a `Retry-After` header.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: maya.chen@example.com
+              password: "S3cur3P@ssw0rd!"
+      responses:
+        '200':
+          description: Login successful. Returns access + refresh token pair.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 401
+                error: INVALID_CREDENTIALS
+                message: "Invalid email or password."
+                timestamp: "2026-04-01T12:00:00Z"
+                path: "/api/v1/auth/login"
+        '429':
+          description: Too many failed login attempts. Retry after the indicated delay.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Number of seconds to wait before retrying.
+              example: 60
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 429
+                error: RATE_LIMIT_EXCEEDED
+                message: "Too many login attempts. Please try again in 60 seconds."
+                timestamp: "2026-04-01T12:00:00Z"
+                path: "/api/v1/auth/login"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshToken
+      summary: Refresh access and refresh token pair
+      description: |
+        Exchanges a valid, non-revoked refresh token for a new access + refresh token pair.
+        The old refresh token is immediately revoked (refresh token rotation).
+
+        If the same refresh token is used twice (replay attempt), both uses return `401`
+        and the token is permanently revoked.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token pair refreshed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Refresh token is missing, expired, or has been revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                expired:
+                  summary: Token has passed its expiry date
+                  value:
+                    status: 401
+                    error: REFRESH_TOKEN_EXPIRED
+                    message: "Refresh token has expired. Please log in again."
+                    timestamp: "2026-04-01T12:00:00Z"
+                    path: "/api/v1/auth/refresh"
+                revoked:
+                  summary: Token was already used or revoked via logout
+                  value:
+                    status: 401
+                    error: REFRESH_TOKEN_REVOKED
+                    message: "Refresh token has been revoked. Please log in again."
+                    timestamp: "2026-04-01T12:00:00Z"
+                    path: "/api/v1/auth/refresh"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutUser
+      summary: Revoke refresh token and end session
+      description: |
+        Marks the provided refresh token as revoked. The access token is not invalidated
+        (JWTs are stateless) but will expire within its 15-minute window.
+
+        Clients must delete both tokens from local storage on a `204` response.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '204':
+          description: Logout successful. Refresh token has been revoked.
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── Notes ──────────────────────────────────────────────────────────────────
+
+  /notes:
+    get:
+      tags: [Notes]
+      operationId: listNotes
+      summary: List notes for the authenticated user
+      description: |
+        Returns a paginated list of note summaries (no full `content` — use
+        `GET /notes/{id}` for the full document). Summaries include a 300-character
+        plain-text preview of the note content.
+
+        Results are sorted by `updatedAt` descending by default.
+
+        **Filtering**: notes can be filtered by tag name (`tag` query param).
+        Multiple tags can be provided as repeated params (`?tag=work&tag=urgent`)
+        — the filter is an AND condition (note must have ALL specified tags).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: |
+            Filter by tag name(s). Case-sensitive. Repeatable.
+            Example: `?tag=work&tag=urgent` returns only notes with both tags.
+          example: work
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [updatedAt, createdAt, title]
+            default: updatedAt
+          description: Field to sort results by.
+        - name: sortDir
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort direction.
+      responses:
+        '200':
+          description: Paginated list of note summaries.
+          headers:
+            X-Total-Count:
+              schema:
+                type: integer
+              description: Total number of notes matching the filter (same as `totalItems` in body).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedNotesResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Notes]
+      operationId: createNote
+      summary: Create a new note
+      description: |
+        Creates a new note belonging to the authenticated user. All fields are optional
+        — a note can be created with just a title, just content, or completely empty.
+
+        The `tagIds` array must contain only UUIDs of tags that belong to the authenticated
+        user. Providing a foreign tag UUID returns `403`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNoteRequest'
+            example:
+              title: "Q1 Planning Notes"
+              content:
+                type: doc
+                content:
+                  - type: paragraph
+                    content:
+                      - type: text
+                        text: "Initial content here."
+              tagIds:
+                - "7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+      responses:
+        '201':
+          description: Note created successfully. Returns the full note document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: One or more provided tagIds belong to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 403
+                error: TAG_NOT_OWNED_BY_USER
+                message: "Tag '7f8a9b0c-...' does not belong to the authenticated user."
+                timestamp: "2026-04-01T12:00:00Z"
+                path: "/api/v1/notes"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /notes/search:
+    get:
+      tags: [Notes]
+      operationId: searchNotes
+      summary: Full-text search across note titles and content
+      description: |
+        Performs PostgreSQL full-text search (`tsvector @@ plainto_tsquery`) against
+        the authenticated user's notes. The query is parsed using `plainto_tsquery`
+        (no need to add `&` or `|` operators — natural language phrases work).
+
+        Results are ranked by `ts_rank` (relevance), then by `updatedAt` as a tiebreaker.
+
+        Minimum query length: 2 characters. Searches are scoped to the authenticated
+        user — cross-user search is not possible.
+
+        **Example**: `GET /notes/search?q=quarterly+report+results`
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 500
+          description: Search query string. Tokenized and stemmed using `plainto_tsquery('english', ?)`.
+          example: "quarterly report results"
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/sizeParam'
+      responses:
+        '200':
+          description: Paginated search results sorted by relevance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedNotesResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /notes/{id}:
+    get:
+      tags: [Notes]
+      operationId: getNoteById
+      summary: Get a single note by ID (full content)
+      description: |
+        Returns the full note document including the complete ProseMirror `content` JSONB.
+        Use this endpoint when opening a note for editing.
+
+        Returns `404` if the note does not exist OR belongs to another user
+        (information hiding — no `403` is returned for foreign notes).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/noteId'
+      responses:
+        '200':
+          description: Full note document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags: [Notes]
+      operationId: updateNote
+      summary: Update a note's title, content, or tags
+      description: |
+        Partially updates a note. Only fields included in the request body are updated.
+        Omitted fields are left unchanged.
+
+        **Tag replacement semantics**: if `tagIds` is provided (including an empty array),
+        the note's current tag associations are replaced wholesale. Omitting `tagIds`
+        entirely leaves existing tag associations unchanged.
+
+        **Autosave**: Angular calls this endpoint on a 500ms debounce after each
+        TipTap editor transaction. The server updates `search_vector` synchronously
+        on every call.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/noteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNoteRequest'
+            example:
+              title: "Q1 Planning Notes (Revised)"
+              content:
+                type: doc
+                content:
+                  - type: paragraph
+                    content:
+                      - type: text
+                        text: "Updated content."
+      responses:
+        '200':
+          description: Note updated successfully. Returns the full updated note.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Note belongs to another user, or a provided tagId belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Notes]
+      operationId: deleteNote
+      summary: Delete a note permanently
+      description: |
+        Permanently deletes the note and all its tag associations. This action is
+        irreversible. The tags themselves (in the `tags` table) are NOT deleted.
+
+        Returns `404` if the note does not exist or belongs to another user.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/noteId'
+      responses:
+        '204':
+          description: Note deleted successfully. No content returned.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── Tags ───────────────────────────────────────────────────────────────────
+
+  /tags:
+    get:
+      tags: [Tags]
+      operationId: listTags
+      summary: List all tags for the authenticated user
+      description: |
+        Returns all tags belonging to the authenticated user, sorted by `name` ascending.
+        This list is used to populate the tag picker in the note editor and the sidebar
+        tag filter.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of all user tags.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedTagsResponse'
+              example:
+                items:
+                  - id: "7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+                    name: "project/alpha"
+                    color: "#4A90E2"
+                    createdAt: "2026-01-20T10:15:00Z"
+                  - id: "8a9b0c1d-2e3f-4a5b-6c7d-8e9f0a1b2c3d"
+                    name: "reading/2026"
+                    color: "#10B981"
+                    createdAt: "2026-01-21T08:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Tags]
+      operationId: createTag
+      summary: Create a new tag
+      description: |
+        Creates a new tag scoped to the authenticated user. Tag names are case-sensitive
+        and must be unique per user. Attempting to create a tag with a duplicate name
+        returns `409`.
+
+        If `color` is omitted, it defaults to `#6B7280` (neutral gray).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+            example:
+              name: "reading/2026"
+              color: "#10B981"
+      responses:
+        '201':
+          description: Tag created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: A tag with this name already exists for this user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 409
+                error: TAG_NAME_ALREADY_EXISTS
+                message: "You already have a tag named 'reading/2026'."
+                timestamp: "2026-04-01T12:00:00Z"
+                path: "/api/v1/tags"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tags/{id}:
+    put:
+      tags: [Tags]
+      operationId: updateTag
+      summary: Update a tag's name or color
+      description: |
+        Partially updates a tag. Only provided fields are changed. Omitted fields
+        are left unchanged.
+
+        Renaming a tag to a name that already exists for the same user returns `409`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/tagId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTagRequest'
+            example:
+              name: "reading/2025"
+              color: "#F59E0B"
+      responses:
+        '200':
+          description: Tag updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Tag not found or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: TAG_NOT_FOUND
+                message: "Tag not found."
+                timestamp: "2026-04-01T12:00:00Z"
+                path: "/api/v1/tags/7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+        '409':
+          description: The new tag name is already used by another tag for this user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 409
+                error: TAG_NAME_ALREADY_EXISTS
+                message: "You already have a tag named 'reading/2025'."
+                timestamp: "2026-04-01T12:00:00Z"
+                path: "/api/v1/tags/7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Tags]
+      operationId: deleteTag
+      summary: Delete a tag
+      description: |
+        Permanently deletes the tag and all its associations (`note_tags` rows).
+        Notes that had this tag are not deleted — they simply lose the tag association.
+
+        Returns `404` if the tag does not exist or belongs to another user.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/tagId'
+      responses:
+        '204':
+          description: Tag deleted successfully. No content returned.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Tag not found or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: TAG_NOT_FOUND
+                message: "Tag not found."
+                timestamp: "2026-04-01T12:00:00Z"
+                path: "/api/v1/tags/7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── System ─────────────────────────────────────────────────────────────────
+
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Application health check
+      description: |
+        Returns the health status of the application and its dependencies.
+        Used by load balancers, uptime monitors, and CI/CD readiness probes.
+
+        This endpoint is **public** (no authentication required) so that monitoring
+        systems do not need to manage credentials.
+
+        - `UP`: all components healthy
+        - `DEGRADED`: application running but one or more non-critical components report issues
+        - `DOWN`: application cannot serve requests (typically returns 503)
+      security: []
+      responses:
+        '200':
+          description: Application is healthy or degraded but operational.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: UP
+                version: "1.0.0"
+                timestamp: "2026-04-01T12:00:00Z"
+                components:
+                  database:
+                    status: UP
+                    details: "PostgreSQL 16.2 — connection pool: 5/20 active"
+        '503':
+          description: Application is down or a critical dependency is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: DOWN
+                version: "1.0.0"
+                timestamp: "2026-04-01T12:00:00Z"
+                components:
+                  database:
+                    status: DOWN
+                    details: "Cannot acquire JDBC connection after 3 retries"

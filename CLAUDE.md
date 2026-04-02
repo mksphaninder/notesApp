@@ -18,9 +18,9 @@ NotesApp/
 
 ### Prerequisites
 - Docker + Docker Compose (for PostgreSQL)
-- Java 21+
-- Node 20+ / npm
-- Angular CLI: `npm install -g @angular/cli`
+- Java 25 (LTS)
+- Node 22+ / npm
+- Angular CLI: `npm install -g @angular/cli@21`
 
 ### Start the database
 ```bash
@@ -60,7 +60,7 @@ ng test --include="**/note*"         # filtered
 
 ## Architecture
 
-### Backend (Spring Boot 3 / Java 21)
+### Backend (Spring Boot 4 / Java 25)
 
 - **Entry point:** `backend/src/main/java/com/notesapp/`
 - **Layer structure:** `controller → service → repository → entity`
@@ -69,7 +69,7 @@ ng test --include="**/note*"         # filtered
 - **API versioning:** All REST endpoints are prefixed `/api/v1/`. Do not break this — iOS Phase 2 reuses the same API.
 - **Tests:** Use TestContainers for integration tests (real PostgreSQL, not H2). Unit tests mock the repository layer.
 
-### Frontend (Angular 17+)
+### Frontend (Angular 21)
 
 - **Standalone components** — no NgModules.
 - **Auth flow:** `AuthService` stores JWT in `localStorage`, `JwtInterceptor` attaches it to every HTTP request, `AuthGuard` protects note routes.

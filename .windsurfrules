@@ -1,0 +1,34 @@
+# NotesApp — Windsurf Rules
+
+## Tech Stack
+- Java 25 LTS + Spring Boot 4.0.x
+- Angular 21 (standalone, Signals, no NgModules)
+- PostgreSQL 16 (Flyway migrations, tsvector FTS)
+- JWT Auth (15 min access / 7 day refresh HttpOnly)
+- TipTap rich text (ProseMirror JSON in JSONB column)
+- STOMP WebSocket for real-time
+
+## Architecture Rules
+
+backend/
+  controller/   → HTTP only, delegates to service
+  service/      → all business logic lives here
+  repository/   → Spring Data JPA interfaces only
+  entity/       → JPA entities with Lombok
+  security/     → JWT filter, UserDetails
+  config/       → Spring configs (Security, WebSocket, CORS)
+  dto/          → request/response objects (no entity exposure)
+  exception/    → custom exceptions + @ControllerAdvice handler
+
+frontend/src/app/
+  core/         → singleton services (AuthService, WebSocketService, interceptors)
+  features/     → feature modules (auth, notes)
+  shared/       → reusable components, pipes, directives
+
+## Guardrails
+- API prefix: /api/v1/ always — iOS Phase 2 reuses this
+- Flyway: add V{n+1}__name.sql, never modify existing migrations
+- Tests: TestContainers for integration, mock repos for unit
+- State: Angular Signals only (no RxJS BehaviorSubject for UI state)
+- Rich text: JSONB column stores ProseMirror JSON, never HTML
+- Tokens: access=JWT Bearer header, refresh=HttpOnly cookie

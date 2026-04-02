@@ -1,0 +1,38 @@
+# NotesApp — Cursor Rules
+
+## Stack
+- Backend: Java 25 + Spring Boot 4 + PostgreSQL 16
+- Frontend: Angular 21 (standalone components, Signals)
+- Real-time: STOMP WebSocket
+- Auth: JWT (Spring Security)
+- Rich text: TipTap (ProseMirror JSON storage)
+
+## Non-negotiable rules
+
+### API
+- All REST endpoints MUST be prefixed `/api/v1/` — iOS Phase 2 reuses this API
+- Never change an existing endpoint URL without adding a migration path
+
+### Database
+- NEVER edit existing Flyway migration files — always create a new `V{n}__description.sql`
+- Use PostgreSQL-native tsvector for full-text search (no Elasticsearch)
+- Rich text content stored as JSONB (ProseMirror JSON), never raw HTML
+
+### Auth
+- Access token: 15 min JWT (Authorization: Bearer header)
+- Refresh token: 7 days JWT (HttpOnly cookie only)
+- Every endpoint except `/api/v1/auth/**` requires a valid Bearer token
+
+### Testing
+- Integration tests MUST use TestContainers with a real PostgreSQL instance — never H2
+- Unit tests mock the repository layer only
+- Angular tests use Vitest + jsdom
+
+### Frontend
+- Use Angular Signals for state — no NgRx, no BehaviorSubject for UI state
+- Standalone components only — no NgModules
+- Environment config via `src/environments/environment.ts`
+
+### Agents
+- Use sub-agents for parallel independent work (frontend / backend / infra)
+- Each agent gets a single clear responsibility
