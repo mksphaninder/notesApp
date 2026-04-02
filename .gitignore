@@ -7,12 +7,21 @@ Thumbs.db
 .vscode/
 *.iml
 
-# Backend
-backend/target/
-backend/.mvn/wrapper/maven-wrapper.jar
+# Java / Spring Boot
 *.class
 *.jar
-!**/test/**/*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+*.ctxt
+.mtj.tmp/
+hs_err_pid*
+replay_pid*
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
 
 # Frontend
 frontend/node_modules/
