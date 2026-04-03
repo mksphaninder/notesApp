@@ -1,9 +1,19 @@
 import { Routes } from '@angular/router';
+import { NotesShellComponent } from './notes-shell/notes-shell.component';
 
-// Phase 2 — Notes CRUD routes (Milestone 2.2)
 export const notesRoutes: Routes = [
   {
     path: '',
-    loadComponent: () => import('./notes-shell/notes-shell.component').then(m => m.NotesShellComponent)
+    component: NotesShellComponent,
+    children: [
+      {
+        path: '',
+        loadComponent: () => import('./note-empty/note-empty.component').then(m => m.NoteEmptyComponent)
+      },
+      {
+        path: ':id',
+        loadComponent: () => import('./note-editor/note-editor.component').then(m => m.NoteEditorComponent)
+      }
+    ]
   }
 ];

@@ -1,0 +1,78 @@
+<div class="list-header">
+  <div class="list-header__top">
+    <span class="list-header__title">Notes</span>
+    <div class="list-header__actions">
+      <button class="btn-icon btn-icon--new" (click)="onNewNote()" title="New note">+</button>
+      <button class="btn-icon btn-icon--logout" (click)="onLogout()" title="Sign out">⎋</button>
+    </div>
+  </div>
+  <input
+    class="search-input"
+    type="search"
+    placeholder="Search notes…"
+    [value]="searchQuery()"
+    (input)="onSearch($any($event.target).value)"
+  />
+</div>
+
+@if (tagService.tags().length > 0) {
+  <div class="tag-filters">
+    <button
+      class="tag-pill"
+      [class.tag-pill--active]="activeTagId() === null"
+      (click)="onTagFilter(null)">
+      All
+    </button>
+    @for (tag of tagService.tags(); track tag.id) {
+      <button
+        class="tag-pill"
+        [class.tag-pill--active]="activeTagId() === tag.id"
+        [style.--tag-color]="tag.color"
+        (click)="onTagFilter(tag.id)">
+        {{ tag.name }}
+      </button>
+    }
+  </div>
+}
+
+<div class="notes-list" role="list">
+  @if (noteService.loading()) {
+    <div class="list-state">
+      <span class="spinner spinner--dark"></span>
+    </div>
+  } @else {
+    @for (note of noteService.notes(); track note.id) {
+      <a
+        class="note-item"
+        [routerLink]="['/notes', note.id]"
+        routerLinkActive="note-item--active"
+        role="listitem">
+        <div class="note-item__title">{{ note.title }}</div>
+        @if (note.excerpt) {
+          <div class="note-item__excerpt">{{ note.excerpt }}</div>
+        }
+        <div class="note-item__meta">
+          <span class="note-item__date">{{ formatDate(note.updatedAt) }}</span>
+          @if (note.tags.length > 0) {
+            <div class="note-item__tags">
+              @for (tag of note.tags; track tag.id) {
+                <span class="note-tag" [style.background]="tag.color + '22'" [style.color]="tag.color">
+                  {{ tag.name }}
+                </span>
+              }
+            </div>
+          }
+        </div>
+        <button
+          class="note-item__delete"
+          (click)="onDeleteNote($event, note.id)"
+          title="Delete note">×</button>
+      </a>
+    } @empty {
+      <div class="list-state list-state--empty">
+        <p>No notes yet.</p>
+        <button class="btn-text" (click)="onNewNote()">Create your first note →</button>
+      </div>
+    }
+  }
+</div>

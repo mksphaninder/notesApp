@@ -1,0 +1,62 @@
+<div class="editor">
+  <div class="editor__toolbar">
+    <div class="toolbar__status">
+      @switch (saveStatus()) {
+        @case ('saving') { <span class="status status--saving">Saving…</span> }
+        @case ('saved')  { <span class="status status--saved">Saved</span> }
+        @case ('error')  { <span class="status status--error">Save failed</span> }
+      }
+    </div>
+
+    <div class="toolbar__actions">
+      <button class="btn-icon" (click)="toggleTagPicker()" title="Manage tags">
+        🏷
+      </button>
+      <button class="btn-icon btn-icon--danger" (click)="onDelete()" title="Delete note">
+        🗑
+      </button>
+    </div>
+  </div>
+
+  @if (showTagPicker() && tagService.tags().length > 0) {
+    <div class="tag-picker">
+      @for (tag of tagService.tags(); track tag.id) {
+        <button
+          class="tag-option"
+          [class.tag-option--active]="isTagAttached(tag.id)"
+          [style.--tag-color]="tag.color"
+          (click)="toggleTag(tag)">
+          <span class="tag-option__dot" [style.background]="tag.color"></span>
+          {{ tag.name }}
+          @if (isTagAttached(tag.id)) { <span class="tag-option__check">✓</span> }
+        </button>
+      }
+    </div>
+  }
+
+  @if (noteService.selectedNote(); as note) {
+    <div class="editor__tags">
+      @for (tag of note.tags; track tag.id) {
+        <span class="attached-tag" [style.background]="tag.color + '22'" [style.color]="tag.color">
+          {{ tag.name }}
+        </span>
+      }
+    </div>
+  }
+
+  <input
+    class="editor__title"
+    type="text"
+    placeholder="Untitled"
+    [value]="title()"
+    (input)="onTitleChange($any($event.target).value)"
+    (keydown)="onTitleKeydown($event)"
+  />
+
+  <textarea
+    class="editor__content"
+    placeholder="Start writing…"
+    [value]="extractPlainText(content())"
+    (input)="onContentChange($any($event.target).value)"
+  ></textarea>
+</div>

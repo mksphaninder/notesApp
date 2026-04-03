@@ -1,19 +1,29 @@
-import { Component } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterOutlet, Router, ActivatedRoute } from '@angular/router';
+import { NoteService } from '../../../core/services/note.service';
+import { TagService } from '../../../core/services/tag.service';
+import { NotesListComponent } from '../notes-list/notes-list.component';
 
-// Placeholder — Phase 2, Milestone 2.2 will replace this
 @Component({
   selector: 'app-notes-shell',
   standalone: true,
-  imports: [CommonModule],
-  template: `
-    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:'Inter',sans-serif;color:#6b7280">
-      <div style="text-align:center">
-        <div style="font-size:3rem;margin-bottom:1rem">📝</div>
-        <h2 style="font-size:1.25rem;font-weight:600;color:#111827;margin-bottom:0.5rem">You're in!</h2>
-        <p>Notes UI coming in Phase 2</p>
-      </div>
-    </div>
-  `
+  imports: [CommonModule, RouterOutlet, NotesListComponent],
+  templateUrl: './notes-shell.component.html',
+  styleUrl: './notes-shell.component.scss'
 })
-export class NotesShellComponent {}
+export class NotesShellComponent implements OnInit {
+  noteService = inject(NoteService);
+  tagService = inject(TagService);
+  private router = inject(Router);
+
+  ngOnInit() {
+    this.noteService.loadNotes().subscribe();
+    this.tagService.loadTags().subscribe();
+  }
+
+  onCreateNote() {
+    this.noteService.createNote({ title: 'Untitled', content: '{"type":"doc","content":[]}' })
+      .subscribe(note => this.router.navigate(['/notes', note.id]));
+  }
+}
