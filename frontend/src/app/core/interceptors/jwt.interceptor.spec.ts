@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient, withInterceptors, HttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
+import { computed } from '@angular/core';
 import { of, throwError } from 'rxjs';
 
 import { jwtInterceptor } from './jwt.interceptor';
@@ -19,10 +20,10 @@ function buildMockAuthService(overrides: Partial<{
 }> = {}): Partial<AuthService> {
   return {
     getAccessToken: vi.fn(() => null),
-    isLoggedIn: vi.fn(() => false),
+    isLoggedIn: computed(() => false),
     refreshToken: vi.fn(() => throwError(() => new Error('No refresh token'))),
     ...overrides
-  };
+  } as unknown as Partial<AuthService>;
 }
 
 const TEST_URL = 'http://localhost:8080/api/v1/notes';

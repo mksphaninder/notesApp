@@ -31,9 +31,9 @@ export class TiptapEditorComponent implements AfterViewInit, OnDestroy {
         this.isExternalUpdate = true;
         try {
           const parsed = JSON.parse(raw || '{"type":"doc","content":[]}');
-          this.editor.commands.setContent(parsed, false);
+          this.editor.commands.setContent(parsed, { emitUpdate: false });
         } catch {
-          this.editor.commands.setContent(raw, false);
+          this.editor.commands.setContent(raw, { emitUpdate: false });
         } finally {
           this.isExternalUpdate = false;
         }
