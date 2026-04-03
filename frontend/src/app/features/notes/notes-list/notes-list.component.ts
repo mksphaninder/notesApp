@@ -8,11 +8,12 @@ import { NoteService } from '../../../core/services/note.service';
 import { TagService } from '../../../core/services/tag.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { NoteSummaryResponse, TagResponse } from '../../../core/models/note.models';
+import { TagManagerComponent } from '../tag-manager/tag-manager.component';
 
 @Component({
   selector: 'app-notes-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, FormsModule],
+  imports: [CommonModule, RouterLink, RouterLinkActive, FormsModule, TagManagerComponent],
   templateUrl: './notes-list.component.html',
   styleUrl: './notes-list.component.scss'
 })

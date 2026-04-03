@@ -20,6 +20,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class NoteService {
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
+        new com.fasterxml.jackson.databind.ObjectMapper();
+
     private final NoteRepository noteRepository;
     private final TagRepository tagRepository;
 
@@ -99,13 +102,40 @@ public class NoteService {
     }
 
     // Extracts plain text from ProseMirror JSON for full-text search indexing.
-    // Phase 3 will replace this with proper TipTap parsing.
     private String extractText(String content) {
         if (content == null || content.isBlank()) return "";
-        // Simple regex extraction of "text" values from ProseMirror JSON
-        return content.replaceAll("\"text\"\\s*:\\s*\"([^\"]+)\"", "$1 ")
-                      .replaceAll("[{},\\[\\]:\"\\\\]", " ")
-                      .replaceAll("\\s+", " ")
-                      .trim();
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = MAPPER.readTree(content);
+            StringBuilder sb = new StringBuilder();
+            extractTextFromNode(root, sb);
+            return sb.toString().trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private void extractTextFromNode(com.fasterxml.jackson.databind.JsonNode node, StringBuilder sb) {
+        if (node == null || node.isNull()) return;
+        if (node.isObject()) {
+            com.fasterxml.jackson.databind.JsonNode typeNode = node.get("type");
+            if (typeNode != null && "text".equals(typeNode.asText())) {
+                com.fasterxml.jackson.databind.JsonNode textNode = node.get("text");
+                if (textNode != null && !textNode.isNull()) {
+                    sb.append(textNode.asText()).append(" ");
+                }
+                return;
+            }
+            // Recurse into "content" array
+            com.fasterxml.jackson.databind.JsonNode contentArr = node.get("content");
+            if (contentArr != null && contentArr.isArray()) {
+                for (com.fasterxml.jackson.databind.JsonNode child : contentArr) {
+                    extractTextFromNode(child, sb);
+                }
+            }
+        } else if (node.isArray()) {
+            for (com.fasterxml.jackson.databind.JsonNode child : node) {
+                extractTextFromNode(child, sb);
+            }
+        }
     }
 }

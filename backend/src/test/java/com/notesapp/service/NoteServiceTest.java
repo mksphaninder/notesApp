@@ -127,6 +127,19 @@ class NoteServiceTest {
             n.getContent().contains("\"type\":\"doc\"")));
     }
 
+    @Test
+    @DisplayName("creates note with extracted plain text for FTS")
+    void createNote_extractsPlainText_forFts() {
+        String proseMirrorJson = "{\"type\":\"doc\",\"content\":[" +
+            "{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Hello world\"}]}]}";
+        CreateNoteRequest req = new CreateNoteRequest("Title", proseMirrorJson, null);
+        when(noteRepository.save(any())).thenReturn(mayaNote);
+
+        noteService.createNote(maya, req);
+
+        verify(noteRepository).save(argThat(n -> n.getContentText().contains("Hello world")));
+    }
+
     // ---- updateNote ----
     @Test @DisplayName("updateNote changes title and content")
     void updateNote_titleAndContent_updated() {

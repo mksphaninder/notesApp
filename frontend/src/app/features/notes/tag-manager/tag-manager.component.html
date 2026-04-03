@@ -1,0 +1,52 @@
+<div class="tag-mgr">
+  <div class="tag-mgr__header">
+    <span class="tag-mgr__label">Tags</span>
+    <button class="tag-mgr__add-btn" (click)="toggle()" [class.tag-mgr__add-btn--active]="isOpen()" title="Manage tags">
+      {{ isOpen() ? '×' : '+' }}
+    </button>
+  </div>
+
+  @if (tagService.tags().length > 0) {
+    <div class="tag-mgr__list">
+      @for (tag of tagService.tags(); track tag.id) {
+        <div class="tag-item">
+          <span class="tag-item__dot" [style.background]="tag.color"></span>
+          <span class="tag-item__name">{{ tag.name }}</span>
+          <button class="tag-item__delete" (click)="deleteTag(tag, $event)" title="Delete tag">×</button>
+        </div>
+      }
+    </div>
+  }
+
+  @if (isOpen()) {
+    <div class="tag-form">
+      <input
+        class="tag-form__input"
+        type="text"
+        placeholder="Tag name…"
+        [value]="newTagName()"
+        (input)="newTagName.set($any($event.target).value)"
+        (keydown.enter)="createTag()"
+        maxlength="50"
+        autofocus
+      />
+      <div class="tag-form__colors">
+        @for (color of presetColors; track color) {
+          <button
+            class="color-swatch"
+            [class.color-swatch--selected]="newTagColor() === color"
+            [style.background]="color"
+            (click)="selectColor(color)"
+            type="button">
+          </button>
+        }
+      </div>
+      @if (error()) {
+        <p class="tag-form__error">{{ error() }}</p>
+      }
+      <button class="tag-form__submit" (click)="createTag()" [disabled]="!newTagName().trim()">
+        Add tag
+      </button>
+    </div>
+  }
+</div>

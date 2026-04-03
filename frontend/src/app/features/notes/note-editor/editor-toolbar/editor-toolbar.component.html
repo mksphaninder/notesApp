@@ -1,0 +1,19 @@
+<div class="toolbar">
+  @for (btn of buttons; track btn.label) {
+    <button
+      class="toolbar__btn"
+      [class.toolbar__btn--active]="btn.isActive()"
+      [title]="btn.title"
+      (mousedown)="$event.preventDefault(); btn.action()"
+      type="button">
+      {{ btn.label }}
+    </button>
+    @if (btn.label === 'S' || btn.label === 'H3' || btn.label === '1.' || btn.label === '❝') {
+      <div class="toolbar__sep"></div>
+    }
+  }
+  <div class="toolbar__sep"></div>
+  <button class="toolbar__btn toolbar__btn--md" title="Copy as Markdown" (mousedown)="$event.preventDefault(); copyMarkdown()" type="button">
+    MD ↗
+  </button>
+</div>
