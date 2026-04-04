@@ -1,5 +1,5 @@
 export const environment = {
   production: true,
   apiUrl: '/api/v1',
-  wsUrl: '/ws'
+  wsUrl: ''  // empty → WebSocketService derives ws(s)://host/ws at runtime
 };

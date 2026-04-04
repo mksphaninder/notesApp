@@ -17,8 +17,10 @@ export class WebSocketService implements OnDestroy {
   }
 
   connect(token: string): void {
+    const wsUrl = environment.wsUrl ||
+      `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
     this.client.configure({
-      brokerURL: environment.wsUrl,
+      brokerURL: wsUrl,
       connectHeaders: { Authorization: `Bearer ${token}` }
     });
     this.client.activate();

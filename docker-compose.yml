@@ -1,6 +1,8 @@
 version: '3.9'
 
 services:
+
+  # ── Database ────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16
     container_name: notesapp-db
@@ -17,6 +19,37 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Backend ─────────────────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: notesapp-api
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notesapp
+      SPRING_DATASOURCE_USERNAME: notesapp
+      SPRING_DATASOURCE_PASSWORD: notesapp
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-must-be-256-bits-long-for-hs256-algorithm}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: notesapp-web
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:
