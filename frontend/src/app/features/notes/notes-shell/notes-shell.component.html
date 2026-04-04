@@ -1,8 +1,18 @@
-<div class="shell">
+<div class="shell" [class.sidebar-open]="sidebarOpen()">
+  <!-- Mobile overlay — click to close sidebar -->
+  <div class="sidebar-overlay" (click)="closeSidebar()"></div>
+
+  <!-- Sidebar -->
   <aside class="sidebar">
-    <app-notes-list (createNote)="onCreateNote()" />
+    <app-notes-list (createNote)="onCreateNote()" (sidebarClose)="closeSidebar()" />
   </aside>
+
+  <!-- Editor area -->
   <main class="editor-area">
+    <!-- Mobile hamburger — only visible below 768px -->
+    <button class="sidebar-toggle" (click)="toggleSidebar()" aria-label="Toggle sidebar" title="Open sidebar">
+      <span></span><span></span><span></span>
+    </button>
     <router-outlet />
   </main>
 </div>

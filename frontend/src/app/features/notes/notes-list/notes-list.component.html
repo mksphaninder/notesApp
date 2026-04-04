@@ -3,19 +3,37 @@
     <span class="list-header__title">Notes</span>
     <div class="list-header__actions">
       <button class="btn-icon btn-icon--new" (click)="onNewNote()" title="New note">+</button>
+      <button class="btn-icon btn-icon--theme" (click)="themeService.toggleTheme()"
+        [title]="themeService.isDark() ? 'Switch to light mode' : 'Switch to dark mode'">
+        {{ themeService.isDark() ? '☀️' : '🌙' }}
+      </button>
       <button class="btn-icon btn-icon--logout" (click)="onLogout()" title="Sign out">⎋</button>
     </div>
   </div>
-  <input
-    class="search-input"
-    type="search"
-    placeholder="Search notes…"
-    [value]="searchQuery()"
-    (input)="onSearch($any($event.target).value)"
-  />
+
+  <div class="search-wrap">
+    <input
+      class="search-input"
+      type="search"
+      placeholder="Search notes…"
+      [value]="searchQuery()"
+      (input)="onSearch($any($event.target).value)"
+    />
+    @if (searchQuery()) {
+      <button class="search-clear" (click)="clearSearch()" title="Clear search">×</button>
+    }
+  </div>
 </div>
 
-@if (tagService.tags().length > 0) {
+@if (searchQuery()) {
+  <div class="search-status">
+    @if (noteService.loading()) {
+      <span>Searching…</span>
+    } @else {
+      <span>{{ noteService.notes().length }} result{{ noteService.notes().length !== 1 ? 's' : '' }} for "{{ searchQuery() }}"</span>
+    }
+  </div>
+} @else if (tagService.tags().length > 0) {
   <div class="tag-filters">
     <button
       class="tag-pill"
@@ -38,7 +56,7 @@
 <div class="notes-list" role="list">
   @if (noteService.loading()) {
     <div class="list-state">
-      <span class="spinner spinner--dark"></span>
+      <span class="spinner"></span>
     </div>
   } @else {
     @for (note of noteService.notes(); track note.id) {
@@ -46,8 +64,9 @@
         class="note-item"
         [routerLink]="['/notes', note.id]"
         routerLinkActive="note-item--active"
+        (click)="onNoteClick()"
         role="listitem">
-        <div class="note-item__title">{{ note.title }}</div>
+        <div class="note-item__title">{{ note.title || 'Untitled' }}</div>
         @if (note.excerpt) {
           <div class="note-item__excerpt">{{ note.excerpt }}</div>
         }
@@ -70,8 +89,13 @@
       </a>
     } @empty {
       <div class="list-state list-state--empty">
-        <p>No notes yet.</p>
-        <button class="btn-text" (click)="onNewNote()">Create your first note →</button>
+        @if (searchQuery()) {
+          <p>No notes match "{{ searchQuery() }}"</p>
+          <button class="btn-text" (click)="clearSearch()">Clear search</button>
+        } @else {
+          <p>No notes yet.</p>
+          <button class="btn-text" (click)="onNewNote()">Create your first note →</button>
+        }
       </div>
     }
   }

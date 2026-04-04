@@ -1,4 +1,4 @@
-import { Component, inject, signal, output, OnInit, effect } from '@angular/core';
+import { Component, inject, signal, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -7,7 +7,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NoteService } from '../../../core/services/note.service';
 import { TagService } from '../../../core/services/tag.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { NoteSummaryResponse, TagResponse } from '../../../core/models/note.models';
+import { ThemeService } from '../../../core/services/theme.service';
 import { TagManagerComponent } from '../tag-manager/tag-manager.component';
 
 @Component({
@@ -19,11 +19,13 @@ import { TagManagerComponent } from '../tag-manager/tag-manager.component';
 })
 export class NotesListComponent {
   noteService = inject(NoteService);
-  tagService = inject(TagService);
+  tagService  = inject(TagService);
+  themeService = inject(ThemeService);
   private authService = inject(AuthService);
   private router = inject(Router);
 
-  createNote = output<void>();
+  createNote  = output<void>();
+  sidebarClose = output<void>();
 
   searchQuery = signal('');
   activeTagId = signal<string | null>(null);
@@ -47,6 +49,10 @@ export class NotesListComponent {
     this.search$.next(value);
   }
 
+  clearSearch() {
+    this.onSearch('');
+  }
+
   onTagFilter(tagId: string | null) {
     this.activeTagId.set(tagId);
     this.searchQuery.set('');
@@ -55,6 +61,10 @@ export class NotesListComponent {
 
   onNewNote() {
     this.createNote.emit();
+  }
+
+  onNoteClick() {
+    this.sidebarClose.emit(); // closes sidebar drawer on mobile
   }
 
   onDeleteNote(event: Event, noteId: string) {
@@ -71,12 +81,11 @@ export class NotesListComponent {
 
   formatDate(iso: string): string {
     const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / 86400000);
+    const now  = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 7)  return `${diffDays}d ago`;
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 }

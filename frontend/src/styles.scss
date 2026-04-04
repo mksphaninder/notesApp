@@ -1,3 +1,55 @@
+/* ── CSS Design Tokens ──────────────────────────────────────────────────────── */
+:root {
+  /* Surfaces */
+  --color-bg:          #ffffff;
+  --color-bg-secondary:#fafafa;
+  --color-bg-hover:    #f3f4f6;
+  --color-bg-active:   #eef2ff;
+  --color-border:      #e5e7eb;
+
+  /* Text */
+  --color-text-primary:   #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted:     #9ca3af;
+  --color-text-placeholder: #d1d5db;
+
+  /* Accent (indigo) */
+  --color-accent:       #6366f1;
+  --color-accent-hover: #4f46e5;
+  --color-accent-light: #eef2ff;
+  --color-accent-glow:  rgba(99, 102, 241, 0.12);
+
+  /* Semantic */
+  --color-success: #10b981;
+  --color-danger:  #ef4444;
+  --color-danger-bg: #fef2f2;
+  --color-saving:  #9ca3af;
+}
+
+:root.dark {
+  --color-bg:          #1e2533;
+  --color-bg-secondary:#161c27;
+  --color-bg-hover:    #2d3748;
+  --color-bg-active:   #2e2b5c;
+  --color-border:      #374151;
+
+  --color-text-primary:   #f3f4f6;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted:     #6b7280;
+  --color-text-placeholder: #4b5563;
+
+  --color-accent:       #818cf8;
+  --color-accent-hover: #6366f1;
+  --color-accent-light: #1e1b4b;
+  --color-accent-glow:  rgba(129, 140, 248, 0.15);
+
+  --color-success: #34d399;
+  --color-danger:  #f87171;
+  --color-danger-bg: #3b1212;
+  --color-saving:  #6b7280;
+}
+
+/* ── Reset ──────────────────────────────────────────────────────────────────── */
 *,
 *::before,
 *::after {
@@ -14,9 +66,10 @@ html {
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  color: #111827;
-  background: #f9fafb;
+  color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
   line-height: 1.5;
+  transition: background 0.2s, color 0.2s;
 }
 
 a {
