@@ -7,6 +7,7 @@ import {
   AuthResponse, LoginRequest, RegisterRequest,
   LogoutRequest, RefreshRequest, UserResponse
 } from '../models/auth.models';
+import { WebSocketService } from './websocket.service';
 
 const ACCESS_TOKEN_KEY = 'notesapp_access_token';
 const REFRESH_TOKEN_KEY = 'notesapp_refresh_token';
@@ -16,6 +17,7 @@ const USER_KEY = 'notesapp_user';
 export class AuthService {
   private http = inject(HttpClient);
   private router = inject(Router);
+  private wsService = inject(WebSocketService);
 
   private _currentUser = signal<UserResponse | null>(this.loadUser());
   private _accessToken = signal<string | null>(localStorage.getItem(ACCESS_TOKEN_KEY));
@@ -76,6 +78,7 @@ export class AuthService {
     localStorage.setItem(USER_KEY, JSON.stringify(response.user));
     this._accessToken.set(response.accessToken);
     this._currentUser.set(response.user);
+    this.wsService.connect(response.accessToken);
   }
 
   private clearSession(): void {
@@ -84,6 +87,7 @@ export class AuthService {
     localStorage.removeItem(USER_KEY);
     this._accessToken.set(null);
     this._currentUser.set(null);
+    this.wsService.disconnect();
   }
 
   private loadUser(): UserResponse | null {

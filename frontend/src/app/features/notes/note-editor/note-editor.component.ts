@@ -1,10 +1,13 @@
-import { Component, inject, signal, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy, ViewChild, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged, takeUntil, switchMap } from 'rxjs';
 import { NoteService } from '../../../core/services/note.service';
 import { TagService } from '../../../core/services/tag.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { WebSocketService } from '../../../core/services/websocket.service';
 import { TagResponse } from '../../../core/models/note.models';
+import { NoteUpdateMessage } from '../../../core/models/websocket.models';
 import { TiptapEditorComponent } from './tiptap-editor/tiptap-editor.component';
 import { EditorToolbarComponent } from './editor-toolbar/editor-toolbar.component';
 
@@ -20,6 +23,8 @@ export class NoteEditorComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   noteService = inject(NoteService);
   tagService = inject(TagService);
+  private authService = inject(AuthService);
+  private wsService = inject(WebSocketService);
 
   @ViewChild(TiptapEditorComponent) tiptapEditor?: TiptapEditorComponent;
 
@@ -32,15 +37,33 @@ export class NoteEditorComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private save$ = new Subject<{ title: string; content: string }>();
 
+  constructor() {
+    // Re-subscribe to the current note's topic whenever WS connects (handles page reload order)
+    effect(() => {
+      if (this.wsService.isConnected()) {
+        const id = this.noteId();
+        if (id) this.wsService.subscribeToNote(id, msg => this.onRemoteUpdate(msg));
+      }
+    });
+  }
+
   ngOnInit() {
     this.route.params.pipe(takeUntil(this.destroy$)).subscribe(params => {
       const id = params['id'];
+      // Unsubscribe from the previous note's topic before switching
+      const prev = this.noteId();
+      if (prev) this.wsService.unsubscribeFromNote(prev);
+
       this.noteId.set(id);
       this.showTagPicker.set(false);
       this.noteService.loadNote(id).subscribe(note => {
         this.title.set(note.title);
         this.content.set(note.content);
         this.saveStatus.set('idle');
+        // Subscribe immediately if already connected; effect() handles the delayed-connect case
+        if (this.wsService.isConnected()) {
+          this.wsService.subscribeToNote(id, msg => this.onRemoteUpdate(msg));
+        }
       });
     });
 
@@ -63,6 +86,8 @@ export class NoteEditorComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    const id = this.noteId();
+    if (id) this.wsService.unsubscribeFromNote(id);
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -106,5 +131,14 @@ export class NoteEditorComponent implements OnInit, OnDestroy {
     const id = this.noteId();
     if (!id) return;
     this.noteService.deleteNote(id).subscribe(() => this.router.navigate(['/notes']));
+  }
+
+  private onRemoteUpdate(msg: NoteUpdateMessage): void {
+    // Ignore our own saves (the backend echoes back to all subscribers including sender)
+    if (msg.updatedBy === this.authService.currentUser()?.email) return;
+    this.title.set(msg.title);
+    this.content.set(msg.content); // triggers TipTap effect() if editor is not focused
+    this.saveStatus.set('saved');
+    setTimeout(() => this.saveStatus.set('idle'), 2000);
   }
 }

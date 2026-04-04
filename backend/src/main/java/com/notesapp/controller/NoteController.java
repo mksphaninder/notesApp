@@ -7,9 +7,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @RestController
@@ -18,6 +20,7 @@ import java.util.UUID;
 public class NoteController {
 
     private final NoteService noteService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @GetMapping
     public ResponseEntity<PagedResponse<NoteSummaryResponse>> listNotes(
@@ -56,7 +59,16 @@ public class NoteController {
             @AuthenticationPrincipal User user,
             @PathVariable UUID id,
             @Valid @RequestBody UpdateNoteRequest request) {
-        return ResponseEntity.ok(noteService.updateNote(user, id, request));
+        NoteResponse updated = noteService.updateNote(user, id, request);
+        messagingTemplate.convertAndSend(
+                "/topic/notes/" + id,
+                new NoteUpdateMessage(
+                        id.toString(),
+                        updated.title(),
+                        updated.content(),
+                        user.getUsername(),
+                        Instant.now().toEpochMilli()));
+        return ResponseEntity.ok(updated);
     }
 
     @DeleteMapping("/{id}")
